@@ -1,8 +1,9 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use crossbeam_channel::{unbounded, Sender};
-use macos_accessibility_client::accessibility;
-use rdev::{display_size, exit_grab, grab, set_is_main_thread, Event, EventType};
+#[cfg(target_os = "macos")]
+use macos_accessibility_client;
+use rdev::{display_size, exit_grab, grab, Event, EventType};
 use std::{
     collections::HashMap,
     io::prelude::*,
@@ -18,10 +19,15 @@ fn start_grab(app_handle: AppHandle, sender: tauri::State<SenderState>) {
     let sender = sender.0.clone();
 
     thread::spawn(move || {
-        accessibility::application_is_trusted_with_prompt();
+        #[cfg(target_os = "macos")]
+        macos_accessibility_client::accessibility::application_is_trusted_with_prompt();
 
         let h = app_handle.clone();
-        set_is_main_thread(false);
+        #[cfg(target_os = "macos")]
+        rdev::set_is_main_thread(false);
+        // FIXME: keyboard captures only when main window is unfocused
+        #[cfg(target_os = "windows")]
+        rdev::set_event_popup(false);
         grab(move |event| {
             let _ = h.emit_all("event", &event);
             sender.try_send(event.clone()).unwrap();
